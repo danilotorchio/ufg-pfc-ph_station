@@ -36,6 +36,7 @@ bool ble_restart_advertising = false;
 
 // Functions declarations
 void init_peripherals();
+void restart_settings();
 void setup_storage();
 void setup_ble();
 void setup_wifi();
@@ -132,27 +133,47 @@ void setup_storage()
 void init_peripherals()
 {
     Heltec.display->clear();
+
     setup_storage();
+    setup_ble();
 
     if (config.loaded)
     {
         Serial.println(config.to_json_string());
 
-        setup_ble();
         setup_wifi();
         setup_rtc();
         setup_lora();
 
-        Heltec.display->drawString(0, 50, "phStation is ready!");
+        Heltec.display->drawString(0, 50, "Estação pronta para uso!");
     }
     else
     {
-        Heltec.display->drawString(0, 0, "Station not configured.");
-        Heltec.display->drawString(0, 20, "Connect on mobile device");
-        Heltec.display->drawString(0, 30, "to configure.");
+        Heltec.display->drawString(0, 20, "Realize a configuração");
+        Heltec.display->drawString(0, 30, "inicial pelo celular.");
     }
 
     Heltec.display->display();
+}
+
+void restart_settings()
+{
+    Heltec.display->displayOn();
+    Heltec.display->clear();
+
+    if (config.loaded)
+    {
+        Serial.println(config.to_json_string());
+
+        setup_wifi();
+        setup_rtc();
+        setup_lora();
+
+        Heltec.display->drawString(0, 50, "Estação pronta para uso!");
+    }
+
+    Heltec.display->display();
+    xTaskCreate(task_turn_display_onoff, "task_turn_display_onoff", 1024, 0, 1, NULL);
 }
 
 void setup_ble()
@@ -290,7 +311,7 @@ void task_bt_execute_cmd(void *params)
                         if ((ret = config.save()) == ESP_OK)
                         {
                             config.loaded = true;
-                            // restart wifi configuration
+                            reconfigure = true;
                         }
                     }
                 }
@@ -307,7 +328,7 @@ void task_bt_execute_cmd(void *params)
 
                 if (ret == ESP_OK)
                 {
-                    // restart wifi configuration
+                    reconfigure = true;
                 }
             }
             else if (ble_cmd == "09")
@@ -327,6 +348,12 @@ void task_bt_execute_cmd(void *params)
             ble_cmd_value.clear();
 
             clear = false;
+        }
+
+        if (reconfigure)
+        {
+            restart_settings();
+            reconfigure = false;
         }
 
         vTaskDelay(ble_device_connected ? 400 : 10000 / portTICK_PERIOD_MS);
